@@ -6,18 +6,18 @@
                   com o uso de um transferidor
   Autor(es):      Luiz Henrique da Silva Amaral e Tainá Blenda Moraes Vianna 
   Data:           23/11/2026
-  Versão:         1.0
+  Versão:         1.1
   Plataforma:     Arduino IDE 2.3.6
   Contato:        luizhsamaral@gmail.com
   GitHub:         https://github.com/LuizAmaral19 
   -----------------------------------------------------------------------------
 
   Hardware:
-  - ESP32 Dev Module
-  - MPU-6050
+- ESP32 Dev Module
+- MPU-6050
 
   Conexões:
-  - MPU-6050:              Pino 22 ESP32 -> SCL MPU-6050 (Pino de Serial Clock)
+- MPU-6050:              Pino 22 ESP32 -> SCL MPU-6050 (Pino de Serial Clock)
                            Pino 21 ESP32 -> SDA MPU-6050 (Pino de Serial Data) 
 
 */
@@ -34,6 +34,8 @@
 
 // --- Constantes Globais ---
 
+#define JANELA_MEDIA 10                       // Número de amostras para a média móvel
+
 const uint8_t MPU = 0x68;                     // Endereço I2C do MPU-6050
 float GanhoX = 1.00111, OffsetX = 0.04078;    // Parâmetro de calibração estática no eixo X
 float GanhoY = 1.00205, OffsetY = -0.01777;   // Parâmetro de calibração estática no eixo Y
@@ -45,10 +47,17 @@ float AccX_raw, AccY_raw, AccZ_raw;
 float AccX, AccY, AccZ;
 float accAngleX, accAngleY;
 
+// Variáveis da média móvel dos ângulos
+float leiturasAngulo[JANELA_MEDIA] = {0.0};
+int indiceLeitura = 0;
+float somaAngulos = 0.0;
+int totalAmostrasColetadas = 0;
+
 // --- Protótipo das funções ---
 
 void lerAcelerometroBruto();
 void rotinaCalibracaoEstatica();
+float calcularMediaAngulo(float novoAngulo);
 
 // --- Configurações Iniciais (Setup) ---
 
@@ -107,17 +116,43 @@ void loop() {
     anguloTransferidor += 360.0;
   }
 
+  // Calcula a média móvel das últimas leituras
+  float anguloMedio = calcularMediaAngulo(anguloTransferidor);
+
   Serial.print("Acc_g [X, Y, Z]: ");
   Serial.print(AccX, 3); Serial.print(", ");
   Serial.print(AccY, 3); Serial.print(", ");
   Serial.print(AccZ, 3);
   Serial.print("  ||  Angulo Transferidor: ");
   Serial.print(anguloTransferidor, 2);
+  Serial.print(" deg | Media: ");
+  Serial.print(anguloMedio, 2);
   Serial.println(" deg");
 
   delay(100);
 
-} //end setup
+} //end loop
+
+// ============= Média Móvel das Leituras de Ângulo =============
+
+float calcularMediaAngulo(float novoAngulo) {
+  // Remove a amostra mais antiga da soma
+  somaAngulos -= leiturasAngulo[indiceLeitura];
+
+  // Insere a nova amostra no buffer circular e soma
+  leiturasAngulo[indiceLeitura] = novoAngulo;
+  somaAngulos += novoAngulo;
+
+  // Atualiza o índice circularmente
+  indiceLeitura = (indiceLeitura + 1) % JANELA_MEDIA;
+
+  // Controla o divisor nas primeiras iterações antes do buffer encher
+  if (totalAmostrasColetadas < JANELA_MEDIA) {
+    totalAmostrasColetadas++;
+  }
+
+  return somaAngulos / totalAmostrasColetadas;
+} //end calcularMediaAngulo
 
 // ============= Leitura Bruta em [g] =============
 
